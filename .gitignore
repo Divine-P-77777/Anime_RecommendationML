@@ -1,0 +1,34 @@
+# -------------------------
+# Dataset / large files
+# -------------------------
+data/
+*.csv
+
+# -------------------------
+# Python / ML
+# -------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+
+# -------------------------
+# Jupyter
+# -------------------------
+.ipynb_checkpoints/
+
+# -------------------------
+# OS / Editor
+# -------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ML artifacts
+model.pkl
+model_features.pkl
+top_genres.pkl
