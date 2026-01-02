@@ -1,5 +1,3 @@
-# app.py
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -44,18 +42,14 @@ FEATURES_PATH = os.path.join(BASE_DIR, "model_features.pkl")
 GENRES_PATH = os.path.join(BASE_DIR, "top_genres.pkl")
 ANIME_CSV_PATH = os.path.join(BASE_DIR, "data", "anime.csv")
 
-# ---------------------------------------------------------------------
 # Globals
-# ---------------------------------------------------------------------
 
 model = None
 model_features: List[str] = []
 top_genres: List[str] = []
 anime_df: pd.DataFrame | None = None
 
-# ---------------------------------------------------------------------
 # Schemas
-# ---------------------------------------------------------------------
 
 class UserPreference(BaseModel):
     genres: List[str]
@@ -63,9 +57,7 @@ class UserPreference(BaseModel):
     type: str = "TV"
     top_n: int = 10
 
-# ---------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------
 
 def bucket_episode(ep: int) -> str:
     if ep <= 1:
@@ -117,6 +109,16 @@ def prepare_features_for_df(
 
     return X[model_features]
 
+
+def safe_title(row: pd.Series) -> str:
+    """
+    Guarantees a non-empty anime title string.
+    """
+    name = row.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return f"Anime #{int(row['anime_id'])}"
+
 # ---------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------
@@ -144,7 +146,6 @@ def load_artifacts():
 
     anime_df["base_score"] = model.predict(X)
 
-    # 🔑 normalize base score so user intent can dominate
     anime_df["base_score"] = (
         anime_df["base_score"] - anime_df["base_score"].mean()
     ) / anime_df["base_score"].std()
@@ -170,9 +171,7 @@ def metadata():
         "types": ["TV", "Movie", "OVA", "ONA", "Special"],
     }
 
-# ---------------------------------------------------------------------
 # Recommendation
-# ---------------------------------------------------------------------
 
 @app.post("/surprise")
 def surprise(preference: UserPreference):
@@ -181,7 +180,7 @@ def surprise(preference: UserPreference):
 
     user_genres = set(preference.genres)
 
-    # 1️⃣ Candidate filtering (kills global bias)
+    # 1️⃣ Candidate filtering
     candidates = anime_df[
         anime_df["genre_set"].apply(lambda g: len(g & user_genres) > 0)
     ]
@@ -219,7 +218,8 @@ def surprise(preference: UserPreference):
     results = [
         {
             "anime_id": int(r.anime_id),
-            "title": r.name,
+            "title": safe_title(r),          # ✅ guaranteed string
+            "display_title": safe_title(r),  # ✅ frontend-safe
             "type": r.type,
             "episodes": int(r.episodes),
             "members": int(r.members),
