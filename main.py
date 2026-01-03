@@ -7,34 +7,42 @@ import joblib
 import os
 import logging
 import numpy as np
+from dotenv import load_dotenv
 
-# ---------------------------------------------------------------------
+load_dotenv()
+
 # Logging
-# ---------------------------------------------------------------------
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------
 # App
-# ---------------------------------------------------------------------
-
 app = FastAPI(title="Anime Discovery ML API")
+
+ENV = os.getenv("ENV", "development")
+FRONTEND_URL = os.getenv("FRONTEND_URL")
+
+if ENV == "development":
+    allow_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+else:
+    allow_origins = [FRONTEND_URL]
+
+logger.info(f"CORS allowed origins: {allow_origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # dev only
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ---------------------------------------------------------------------
 # Paths
-# ---------------------------------------------------------------------
+
 
 BASE_DIR = os.path.dirname(__file__)
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
@@ -119,15 +127,14 @@ def safe_title(row: pd.Series) -> str:
         return name.strip()
     return f"Anime #{int(row['anime_id'])}"
 
-# ---------------------------------------------------------------------
+
 # Startup
-# ---------------------------------------------------------------------
 
 @app.on_event("startup")
 def load_artifacts():
     global model, model_features, top_genres, anime_df
 
-    logger.info("🚀 Starting Anime Discovery ML API")
+    logger.info(" Starting Anime Discovery ML API")
 
     model = joblib.load(MODEL_PATH)
     model_features = joblib.load(FEATURES_PATH)
@@ -156,9 +163,7 @@ def load_artifacts():
 
     logger.info(f"✅ Loaded {len(anime_df)} anime")
 
-# ---------------------------------------------------------------------
 # Routes
-# ---------------------------------------------------------------------
 
 @app.get("/")
 def root():
@@ -180,7 +185,7 @@ def surprise(preference: UserPreference):
 
     user_genres = set(preference.genres)
 
-    # 1️⃣ Candidate filtering
+    # 1 Candidate filtering
     candidates = anime_df[
         anime_df["genre_set"].apply(lambda g: len(g & user_genres) > 0)
     ]
@@ -188,7 +193,7 @@ def surprise(preference: UserPreference):
     if candidates.empty:
         candidates = anime_df.sample(300)
 
-    # 2️⃣ User-centric scoring
+    # 2️ User-centric scoring
     def compute_final_score(row):
         score = row["base_score"]
 
@@ -206,7 +211,7 @@ def surprise(preference: UserPreference):
     candidates = candidates.copy()
     candidates["final_score"] = candidates.apply(compute_final_score, axis=1)
 
-    # 3️⃣ Diversity sampling
+    # 3 Diversity sampling
     pool = candidates.sort_values(
         "final_score", ascending=False
     ).head(preference.top_n * 3)
@@ -218,8 +223,8 @@ def surprise(preference: UserPreference):
     results = [
         {
             "anime_id": int(r.anime_id),
-            "title": safe_title(r),          # ✅ guaranteed string
-            "display_title": safe_title(r),  # ✅ frontend-safe
+            "title": safe_title(r),          
+            "display_title": safe_title(r),  
             "type": r.type,
             "episodes": int(r.episodes),
             "members": int(r.members),
